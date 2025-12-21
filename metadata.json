@@ -1,0 +1,5 @@
+{
+  "name": "Pro-VUS Exam Manager",
+  "description": "AI-powered exam grading system for Teacher Care (TC) staff. Manages classes, students, and automates PDF exam grading using Gemini.",
+  "requestFramePermissions": []
+}
