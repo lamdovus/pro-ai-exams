@@ -1,6 +1,11 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
 
+import { GoogleGenAI, Type } from "@google/genai";
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+
+if (!API_KEY) {
+  throw new Error("Thiếu VITE_GEMINI_API_KEY trong .env.local. Hãy restart npm run dev.");
+}
 /**
  * Hàm hỗ trợ dọn dẹp chuỗi JSON từ phản hồi của AI
  */
@@ -25,10 +30,10 @@ export const identifyExamCode = async (
   base64Data: string,
   mimeType: string
 ): Promise<string> => {
-  if (!process.env.API_KEY) throw new Error("API_KEY chưa được cấu hình.");
+  if (!API_KEY) throw new Error("API_KEY chưa được cấu hình.");
 
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: {
@@ -64,12 +69,12 @@ export const processExamImage = async (
   modelName: string = 'gemini-3-pro-preview'
 ): Promise<any> => {
   
-  if (!process.env.API_KEY) {
+  if (!API_KEY) {
     throw new Error("API_KEY chưa được cấu hình.");
   }
 
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: API_KEY });
     
     const prompt = `
       BẠN LÀ MỘT GIÁO VIÊN TIẾNG ANH TẠI VUS. 

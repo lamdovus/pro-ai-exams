@@ -15,6 +15,7 @@ import { GoogleGenAI } from "@google/genai";
 import { VusLogo, MOCK_ANSWER_KEYS, MOCK_HISTORY, MOCK_COURSES } from './constants.tsx';
 import { Course, Student, AnswerKey, GradeStatus, ExamSession, ApiResponse, ApiStudentResponse } from './types.ts';
 import { processExamImage, identifyExamCode } from './services/geminiService.ts';
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string;
 
 // Cấu hình PDF.js worker
 const PDF_WORKER_URL = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -165,21 +166,35 @@ const ResultModal = ({ session, onClose }: { session: ExamSession, onClose: () =
 };
 
 async function extractAnswerKeyWithAI(base64Data: string, mimeType: string): Promise<string> {
-  if (!process.env.API_KEY) return "Vui lòng cấu hình API_KEY.";
+  const API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string;
+
+  if (!API_KEY) return "Vui lòng cấu hình VITE_GEMINI_API_KEY trong .env.local (rồi restart npm run dev).";
+
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: API_KEY });
+
+    // Cách 1 (ổn định nhất): dùng flash để trích xuất text
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: "gemini-3-flash-preview",
       contents: {
         parts: [
           { text: "Hãy trích xuất nội dung đáp án mẫu từ tài liệu này dưới dạng text thuần túy." },
           { inlineData: { mimeType, data: base64Data } }
         ]
+      },
+      config: {
+        thinkingConfig: { thinkingBudget: 0 } // flash ok với 0
       }
     });
+
     return response.text || "";
-  } catch (error) { return "Không thể trích xuất."; }
+  } catch (error) {
+    console.error("extractAnswerKeyWithAI error:", error);
+    return "Không thể trích xuất (Gemini lỗi). Vui lòng kiểm tra Console/Network.";
+  }
 }
+
+
 
 async function fetchAllFromOrds<T>(baseUrl: string, headers: Record<string, string>): Promise<T[]> {
   let allItems: T[] = [];
@@ -299,7 +314,10 @@ const AnswerKeysManagement = ({ keys, onAddKey, onDeleteKey, searchTerm }: { key
         });
         const extractedContent = await extractAnswerKeyWithAI(base64Data, file.type);
         onAddKey({ name: file.name.replace(/\.[^/.]+$/, ""), code: file.name.split('_')[0] || 'TBD', content: extractedContent, fileData: base64Data, mimeType: file.type });
-      } catch (err) { }
+      } catch (err) {
+        console.error("Upload/Extract failed:", err);
+        alert("Upload/Extract bị lỗi. Mở Console để xem chi tiết.");
+      }
     }
     setIsProcessing(false);
     setIsModalOpen(false);
