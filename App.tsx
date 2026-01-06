@@ -537,6 +537,73 @@ const AnswerKeysManagement = ({ keys, onAddKey, onDeleteKey, searchTerm, examSes
           </table>
         </div>
       </div>
+      {/* --- Overview Summary (all classes) --- */}
+      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm mb-6">
+        <h3 className="text-sm font-black text-gray-900 uppercase tracking-tight mb-4 flex items-center gap-2"><BarChart3 size={16} className="text-vus-blue" /> Tổng quan thống kê</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+          {/* overall stats */}
+          <div className="p-4 rounded-xl bg-vus-light border border-blue-50 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Học viên đã có điểm</p>
+              <p className="text-2xl font-black text-gray-900">{(() => {
+                const unique = new Set(examSessions.map((s: ExamSession) => `${s.studentId}@${s.courseId}`));
+                return unique.size;
+              })()}</p>
+            </div>
+            <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center shadow-inner">
+              <Award size={28} className="text-vus-blue" />
+            </div>
+          </div>
+          <div className="col-span-1 md:col-span-2 p-4 rounded-xl bg-white border border-gray-50 shadow-sm">
+            <div className="flex gap-4 items-center">
+              {(() => {
+                const stats = { good: 0, mid: 0, weak: 0 };
+                examSessions.forEach((s: ExamSession) => { if (typeof s.score === 'number') { if (s.score >= 8) stats.good++; else if (s.score >= 5) stats.mid++; else stats.weak++; }});
+                const total = stats.good + stats.mid + stats.weak;
+                if (total === 0) return <div className="text-gray-400 font-black uppercase tracking-widest">Chưa có dữ liệu</div>;
+                const pct = (n: number) => Math.round((n / total) * 100);
+                return (
+                  <div className="flex-1 grid grid-cols-3 gap-4">
+                    <div className="text-center">
+                      <div className="text-lg font-black text-vus-blue">{stats.good}</div>
+                      <div className="text-[11px] font-black text-gray-400 uppercase tracking-widest mt-1">Giỏi • {pct(stats.good)}%</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-lg font-black text-yellow-600">{stats.mid}</div>
+                      <div className="text-[11px] font-black text-gray-400 uppercase tracking-widest mt-1">Trung bình • {pct(stats.mid)}%</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-lg font-black text-red-600">{stats.weak}</div>
+                      <div className="text-[11px] font-black text-gray-400 uppercase tracking-widest mt-1">Yếu • {pct(stats.weak)}%</div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+
+        {/* per-class small table */}
+        <div className="mt-4 overflow-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-gray-400 uppercase"><th className="py-2">Lớp</th><th>Giỏi</th><th>Trung bình</th><th>Yếu</th></tr>
+            </thead>
+            <tbody>
+              {courses.map((course: Course) => {
+                const courseSessions = examSessions.filter((s: ExamSession) => s.courseId === course.id && typeof s.score === 'number');
+                const uniqueByStudent = new Map<string, number>();
+                courseSessions.forEach(s => uniqueByStudent.set(s.studentId, s.score || 0));
+                const counts = { good: 0, mid: 0, weak: 0 };
+                uniqueByStudent.forEach(score => { if (score >= 8) counts.good++; else if (score >= 5) counts.mid++; else counts.weak++; });
+                return (
+                  <tr key={course.id} className="border-t"><td className="py-2 font-bold">{course.name}</td><td className="text-vus-blue font-black">{counts.good}</td><td className="text-yellow-600 font-black">{counts.mid}</td><td className="text-red-600 font-black">{counts.weak}</td></tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
       <div className="flex justify-between items-end mb-8">
         <div>
           <h1 className="text-3xl font-black text-gray-900 tracking-tighter uppercase">Quản lý đáp án mẫu</h1>
@@ -924,11 +991,7 @@ const ClassDetails = ({ courses, studentsCache, onUpdateStudents, userEmail, sea
           <h2 className="text-2xl font-black text-gray-900 uppercase">Danh sách học viên</h2>
           <p className="text-gray-400 text-xs font-medium uppercase mt-1 tracking-widest">Lớp: {course.name} • {filteredStudents.length} học viên</p>
         </div>
-        <div>
-          <Link to={`/class/${encodeURIComponent(courseId)}/statistics`} className="px-4 py-2 bg-vus-blue text-white rounded-2xl font-black uppercase text-xs shadow hover:opacity-95">Xem thống kê</Link>
-        </div>
       </div>
-
       {/* Statistics Card for this class */}
       <div className="mb-6">
         {(() => {
@@ -972,7 +1035,6 @@ const ClassDetails = ({ courses, studentsCache, onUpdateStudents, userEmail, sea
           );
         })()}
       </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {loading ? (
           <div className="col-span-full py-20 flex flex-col items-center justify-center">
