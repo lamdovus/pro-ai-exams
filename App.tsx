@@ -991,6 +991,9 @@ const ClassDetails = ({ courses, studentsCache, onUpdateStudents, userEmail, sea
           <h2 className="text-2xl font-black text-gray-900 uppercase">Danh sách học viên</h2>
           <p className="text-gray-400 text-xs font-medium uppercase mt-1 tracking-widest">Lớp: {course.name} • {filteredStudents.length} học viên</p>
         </div>
+        <div>
+          <Link to={`/class/${encodeURIComponent(courseId)}/statistics`} className="px-4 py-2 bg-vus-blue text-white rounded-2xl font-black uppercase text-xs shadow hover:opacity-95">Xem thống kê</Link>
+        </div>
       </div>
       {/* Statistics Card for this class */}
       <div className="mb-6">
