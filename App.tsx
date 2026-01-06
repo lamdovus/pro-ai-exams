@@ -81,6 +81,150 @@ const PdfCanvasViewer = ({ base64Data }: { base64Data: string }) => {
   );
 };
 
+const StatisticsPanel = ({ courses, examSessions, courseId }: any) => {
+  if (courseId) {
+    const course = courses.find((c: any) => c.id === courseId);
+    const courseSessions = examSessions.filter((s: ExamSession) => s.courseId === courseId && typeof s.score === 'number');
+    const uniqueByStudent = new Map<string, number>();
+    courseSessions.forEach(s => uniqueByStudent.set(s.studentId, s.score || 0));
+    const total = uniqueByStudent.size;
+    const counts = { good: 0, mid: 0, weak: 0 };
+    uniqueByStudent.forEach(score => { if (score >= 8) counts.good++; else if (score >= 5) counts.mid++; else counts.weak++; });
+    if (total === 0) {
+      return (<div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm text-center font-black text-gray-400 uppercase">Chưa có dữ liệu chấm điểm</div>);
+    }
+    const pct = (n: number) => Math.round((n / total) * 100);
+    return (
+      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-6">
+        <div className="flex-1">
+          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tổng học viên đã có điểm</p>
+          <div className="text-3xl font-black text-gray-900 mt-1">{total}</div>
+          <div className="grid grid-cols-3 gap-4 mt-4">
+            <div className="text-center">
+              <div className="text-lg font-black text-vus-blue">{counts.good}</div>
+              <div className="text-[11px] font-black text-gray-400 uppercase tracking-widest mt-1">Giỏi • {pct(counts.good)}%</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-black text-yellow-600">{counts.mid}</div>
+              <div className="text-[11px] font-black text-gray-400 uppercase tracking-widest mt-1">Trung bình • {pct(counts.mid)}%</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-black text-red-600">{counts.weak}</div>
+              <div className="text-[11px] font-black text-gray-400 uppercase tracking-widest mt-1">Yếu • {pct(counts.weak)}%</div>
+            </div>
+          </div>
+        </div>
+        <div className="w-36 h-36 flex items-center justify-center">
+          <div style={{ width: 120, height: 120, borderRadius: '9999px', background: `conic-gradient(#0ea5e9 ${pct(counts.good)}%, #f59e0b ${pct(counts.good + counts.mid)}%, #ef4444 0)` }} className="rounded-full shadow-inner"></div>
+        </div>
+      </div>
+    );
+  }
+
+  // Overview across all classes
+  const totalClasses = courses.length;
+  const totalStudents = courses.reduce((s: number, c: any) => s + (c.studentCount || 0), 0);
+  const unique = new Set(examSessions.map((s: ExamSession) => `${s.studentId}@${s.courseId}`));
+  const gradedSessions = examSessions.filter((s: ExamSession) => typeof s.score === 'number');
+  const stats = { good: 0, mid: 0, weak: 0 };
+  // aggregate unique latest score per student@course
+  const latestMap = new Map<string, number>();
+  gradedSessions.forEach(s => {
+    latestMap.set(`${s.studentId}@${s.courseId}`, s.score || 0);
+  });
+  latestMap.forEach(score => { if (score >= 8) stats.good++; else if (score >= 5) stats.mid++; else stats.weak++; });
+  const totalGraded = stats.good + stats.mid + stats.weak;
+  if (totalGraded === 0) {
+    return (<div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm text-center font-black text-gray-400 uppercase">Chưa có dữ liệu chấm điểm</div>);
+  }
+  const pct = (n: number) => Math.round((n / totalGraded) * 100);
+  return (
+    <div className="space-y-6">
+      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tổng quan</p>
+            <h3 className="text-2xl font-black text-gray-900">Tổng quan thống kê</h3>
+          </div>
+          <div className="text-right text-sm text-gray-500">
+            <div className="font-black text-gray-900">{totalClasses} Lớp</div>
+            <div className="text-gray-400">{totalStudents} Học viên</div>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="text-center">
+            <div className="text-lg font-black text-vus-blue">{stats.good}</div>
+            <div className="text-[11px] font-black text-gray-400 uppercase tracking-widest mt-1">Giỏi • {pct(stats.good)}%</div>
+          </div>
+          <div className="text-center">
+            <div className="text-lg font-black text-yellow-600">{stats.mid}</div>
+            <div className="text-[11px] font-black text-gray-400 uppercase tracking-widest mt-1">Trung bình • {pct(stats.mid)}%</div>
+          </div>
+          <div className="text-center">
+            <div className="text-lg font-black text-red-600">{stats.weak}</div>
+            <div className="text-[11px] font-black text-gray-400 uppercase tracking-widest mt-1">Yếu • {pct(stats.weak)}%</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+        <h4 className="text-sm font-black text-gray-900 uppercase tracking-widest mb-4 flex items-center gap-2"><BarChart3 size={16} className="text-vus-blue" /> Thống kê theo lớp</h4>
+        <div className="overflow-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-gray-400 uppercase"><th className="py-2">Lớp</th><th>Giỏi</th><th>Trung bình</th><th>Yếu</th></tr>
+            </thead>
+            <tbody>
+              {courses.map((course: any) => {
+                const courseSessions = examSessions.filter((s: ExamSession) => s.courseId === course.id && typeof s.score === 'number');
+                const uniqueByStudent = new Map<string, number>();
+                courseSessions.forEach(s => uniqueByStudent.set(s.studentId, s.score || 0));
+                const counts = { good: 0, mid: 0, weak: 0 };
+                uniqueByStudent.forEach(score => { if (score >= 8) counts.good++; else if (score >= 5) counts.mid++; else counts.weak++; });
+                return (
+                  <tr key={course.id} className="border-t"><td className="py-2 font-bold">{course.name}</td><td className="text-vus-blue font-black">{counts.good}</td><td className="text-yellow-600 font-black">{counts.mid}</td><td className="text-red-600 font-black">{counts.weak}</td></tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const StatisticsOverview = ({ courses, examSessions }: any) => {
+  return (
+    <div className="p-8 max-w-7xl mx-auto">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-black text-gray-900 tracking-tighter uppercase">Tổng quan thống kê</h1>
+          <p className="text-gray-400 font-medium mt-1 uppercase tracking-widest text-[10px]">Tổng hợp từ tất cả lớp</p>
+        </div>
+      </div>
+      <StatisticsPanel courses={courses} examSessions={examSessions} />
+    </div>
+  );
+};
+
+const ClassStatistics = ({ courses, examSessions }: any) => {
+  const { id } = useParams();
+  const courseId = decodeURIComponent(id || '');
+  const course = courses.find((c: any) => c.id === courseId);
+  if (!course) return <div className="p-8 text-center font-black text-gray-400 uppercase">Không tìm thấy lớp.</div>;
+  return (
+    <div className="p-8 max-w-7xl mx-auto">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-black text-gray-900 uppercase">Thống kê lớp {course.name}</h1>
+          <p className="text-gray-400 text-xs font-medium uppercase mt-1 tracking-widest">Lớp: {course.name}</p>
+        </div>
+      </div>
+      <StatisticsPanel courses={courses} examSessions={examSessions} courseId={courseId} />
+    </div>
+  );
+};
+
 const SkillBar = ({ label, score, color = 'bg-vus-blue' }: { label: string, score: number, color?: string }) => (
   <div className="space-y-1.5">
     <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
@@ -780,6 +924,52 @@ const ClassDetails = ({ courses, studentsCache, onUpdateStudents, userEmail, sea
           <h2 className="text-2xl font-black text-gray-900 uppercase">Danh sách học viên</h2>
           <p className="text-gray-400 text-xs font-medium uppercase mt-1 tracking-widest">Lớp: {course.name} • {filteredStudents.length} học viên</p>
         </div>
+        <div>
+          <Link to={`/class/${encodeURIComponent(courseId)}/statistics`} className="px-4 py-2 bg-vus-blue text-white rounded-2xl font-black uppercase text-xs shadow hover:opacity-95">Xem thống kê</Link>
+        </div>
+      </div>
+      {/* Statistics Card for this class */}
+      <div className="mb-6">
+        {(() => {
+          const courseSessions = examSessions.filter((s: ExamSession) => s.courseId === courseId && typeof s.score === 'number');
+          const uniqueByStudent = new Map<string, number>();
+          courseSessions.forEach(s => uniqueByStudent.set(s.studentId, s.score || 0));
+          const total = uniqueByStudent.size;
+          const counts = { good: 0, mid: 0, weak: 0 };
+          uniqueByStudent.forEach(score => { if (score >= 8) counts.good++; else if (score >= 5) counts.mid++; else counts.weak++; });
+          if (total === 0) {
+            return (
+              <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm text-center font-black text-gray-400 uppercase">Chưa có dữ liệu chấm điểm</div>
+            );
+          }
+          const pct = (n: number) => Math.round((n / total) * 100);
+          return (
+            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-6">
+              <div className="flex-1">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tổng học viên đã có điểm</p>
+                <div className="text-3xl font-black text-gray-900 mt-1">{total}</div>
+                <div className="grid grid-cols-3 gap-4 mt-4">
+                  <div className="text-center">
+                    <div className="text-lg font-black text-vus-blue">{counts.good}</div>
+                    <div className="text-[11px] font-black text-gray-400 uppercase tracking-widest mt-1">Giỏi • {pct(counts.good)}%</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-black text-yellow-600">{counts.mid}</div>
+                    <div className="text-[11px] font-black text-gray-400 uppercase tracking-widest mt-1">Trung bình • {pct(counts.mid)}%</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-black text-red-600">{counts.weak}</div>
+                    <div className="text-[11px] font-black text-gray-400 uppercase tracking-widest mt-1">Yếu • {pct(counts.weak)}%</div>
+                  </div>
+                </div>
+              </div>
+              <div className="w-36 h-36 flex items-center justify-center">
+                {/* Simple pie using conic-gradient fallback (inline style) */}
+                <div style={{ width: 120, height: 120, borderRadius: '9999px', background: `conic-gradient(#0ea5e9 ${pct(counts.good)}%, #f59e0b ${pct(counts.good + counts.mid)}%, #ef4444 0)` }} className="rounded-full shadow-inner"></div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
       {/* Statistics Card for this class */}
       <div className="mb-6">
@@ -980,6 +1170,7 @@ const App = () => {
           <div className="flex-1 px-4 space-y-1.5">
             <SidebarItem icon={LayoutGrid} label="Lớp học của tôi" to="/" exact />
             <SidebarItem icon={FileText} label="Quản lý đáp án mẫu" to="/keys" />
+            <SidebarItem icon={BarChart3} label="Thống kê" to="/statistics" />
             <SidebarItem icon={Users} label="Học viên" to="/students" />
             <SidebarItem icon={Settings} label="Cài đặt" to="/settings" />
           </div>
@@ -991,6 +1182,8 @@ const App = () => {
             <Routes>
               <Route path="/" element={<Dashboard courses={courses} examSessions={examSessions} onRefresh={handleRefreshCourses} isRefreshing={isRefreshing} searchTerm={searchTerm} />} />
               <Route path="/class/:id" element={<ClassDetails courses={courses} studentsCache={studentsCache} onUpdateStudents={(cid: string, s: any) => setStudentsCache(p => ({ ...p, [cid]: s }))} userEmail={userEmail} searchTerm={searchTerm} examSessions={examSessions} />} />
+              <Route path="/class/:id/statistics" element={<ClassStatistics courses={courses} examSessions={examSessions} />} />
+              <Route path="/statistics" element={<StatisticsOverview courses={courses} examSessions={examSessions} />} />
               <Route path="/student/:id" element={<StudentDetails courses={courses} studentsCache={studentsCache} answerKeys={answerKeys} onGradeExam={handleGradeExam} examHistory={examSessions} />} />
               <Route path="/keys" element={<AnswerKeysManagement keys={answerKeys} onDeleteKey={deleteAnswerKey} onAddKey={addAnswerKey} searchTerm={searchTerm} />} />
               <Route path="/students" element={<StudentsList searchTerm={searchTerm} studentsCache={studentsCache} examSessions={examSessions} />} />
