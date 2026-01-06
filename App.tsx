@@ -374,13 +374,13 @@ async function fetchCoursesFromOrds(email: string): Promise<Course[]> {
   } catch (e) { return []; }
 }
 
-const SidebarItem = ({ icon: Icon, label, to, exact = false, textClass = '' }: { icon: any, label: string, to: string, exact?: boolean, textClass?: string }) => {
+const SidebarItem = ({ icon: Icon, label, to, exact = false }: { icon: any, label: string, to: string, exact?: boolean }) => {
   const location = useLocation();
   const isActive = exact ? location.pathname === to : location.pathname.startsWith(to === '/' ? '____' : to) || (to === '/' && location.pathname === '/');
   return (
     <Link to={to} className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${isActive ? 'bg-vus-blue text-white shadow-lg' : 'text-gray-500 hover:bg-gray-50'}`}>
       <Icon size={20} />
-      <span className={`font-bold text-sm ${textClass}`}>{label}</span>
+      <span className="font-bold text-sm">{label}</span>
     </Link>
   );
 };
@@ -1221,7 +1221,7 @@ const App = () => {
           <div className="h-20 flex items-center px-6 mb-4 mt-2"><VusLogo /></div>
           <div className="flex-1 px-4 space-y-1.5">
             <SidebarItem icon={LayoutGrid} label="Lớp học của tôi" to="/" exact />
-            <SidebarItem icon={FileText} label="Quản lý đáp án mẫu" to="/keys" textClass={answerKeys.length === 0 ? 'text-red-600' : 'text-green-600'} />
+            <SidebarItem icon={FileText} label="Quản lý đáp án mẫu" to="/keys" />
             <SidebarItem icon={BarChart3} label="Thống kê" to="/statistics" />
             <SidebarItem icon={Users} label="Học viên" to="/students" />
             <SidebarItem icon={Settings} label="Cài đặt" to="/settings" />
