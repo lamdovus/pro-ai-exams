@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { HashRouter, Routes, Route, Link, useParams, useNavigate, useLocation, Navigate, useSearchParams } from 'react-router-dom';
 import { 
@@ -928,6 +927,7 @@ const ClassDetails = ({ courses, studentsCache, onUpdateStudents, userEmail, sea
           <Link to={`/class/${encodeURIComponent(courseId)}/statistics`} className="px-4 py-2 bg-vus-blue text-white rounded-2xl font-black uppercase text-xs shadow hover:opacity-95">Xem thống kê</Link>
         </div>
       </div>
+
       {/* Statistics Card for this class */}
       <div className="mb-6">
         {(() => {
@@ -971,6 +971,7 @@ const ClassDetails = ({ courses, studentsCache, onUpdateStudents, userEmail, sea
           );
         })()}
       </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {loading ? (
           <div className="col-span-full py-20 flex flex-col items-center justify-center">
