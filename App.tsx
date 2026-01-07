@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { HashRouter, Routes, Route, Link, useParams, useNavigate, useLocation, Navigate, useSearchParams } from 'react-router-dom';
 import { 
@@ -415,7 +414,7 @@ const Header = ({ userEmail, searchTerm, setSearchTerm }: { userEmail: string, s
   </header>
 );
 
-const AnswerKeysManagement = ({ keys, onAddKey, onDeleteKey, searchTerm }: { keys: AnswerKey[], onAddKey: (key: Omit<AnswerKey, 'id'>) => void, onDeleteKey: (id: string) => void, searchTerm: string }) => {
+const AnswerKeysManagement = ({ keys, onAddKey, onDeleteKey, searchTerm, examSessions, courses }: { keys: AnswerKey[], onAddKey: (key: Omit<AnswerKey, 'id'>) => void, onDeleteKey: (id: string) => void, searchTerm: string, examSessions: ExamSession[], courses: Course[] }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [detailKey, setDetailKey] = useState<AnswerKey | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -928,6 +927,7 @@ const ClassDetails = ({ courses, studentsCache, onUpdateStudents, userEmail, sea
           <Link to={`/class/${encodeURIComponent(courseId)}/statistics`} className="px-4 py-2 bg-vus-blue text-white rounded-2xl font-black uppercase text-xs shadow hover:opacity-95">Xem thống kê</Link>
         </div>
       </div>
+
       {/* Statistics Card for this class */}
       <div className="mb-6">
         {(() => {
@@ -971,49 +971,7 @@ const ClassDetails = ({ courses, studentsCache, onUpdateStudents, userEmail, sea
           );
         })()}
       </div>
-      {/* Statistics Card for this class */}
-      <div className="mb-6">
-        {(() => {
-          const courseSessions = examSessions.filter((s: ExamSession) => s.courseId === courseId && typeof s.score === 'number');
-          const uniqueByStudent = new Map<string, number>();
-          courseSessions.forEach(s => uniqueByStudent.set(s.studentId, s.score || 0));
-          const total = uniqueByStudent.size;
-          const counts = { good: 0, mid: 0, weak: 0 };
-          uniqueByStudent.forEach(score => { if (score >= 8) counts.good++; else if (score >= 5) counts.mid++; else counts.weak++; });
-          if (total === 0) {
-            return (
-              <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm text-center font-black text-gray-400 uppercase">Chưa có dữ liệu chấm điểm</div>
-            );
-          }
-          const pct = (n: number) => Math.round((n / total) * 100);
-          return (
-            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-6">
-              <div className="flex-1">
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tổng học viên đã có điểm</p>
-                <div className="text-3xl font-black text-gray-900 mt-1">{total}</div>
-                <div className="grid grid-cols-3 gap-4 mt-4">
-                  <div className="text-center">
-                    <div className="text-lg font-black text-vus-blue">{counts.good}</div>
-                    <div className="text-[11px] font-black text-gray-400 uppercase tracking-widest mt-1">Giỏi • {pct(counts.good)}%</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-lg font-black text-yellow-600">{counts.mid}</div>
-                    <div className="text-[11px] font-black text-gray-400 uppercase tracking-widest mt-1">Trung bình • {pct(counts.mid)}%</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-lg font-black text-red-600">{counts.weak}</div>
-                    <div className="text-[11px] font-black text-gray-400 uppercase tracking-widest mt-1">Yếu • {pct(counts.weak)}%</div>
-                  </div>
-                </div>
-              </div>
-              <div className="w-36 h-36 flex items-center justify-center">
-                {/* Simple pie using conic-gradient fallback (inline style) */}
-                <div style={{ width: 120, height: 120, borderRadius: '9999px', background: `conic-gradient(#0ea5e9 ${pct(counts.good)}%, #f59e0b ${pct(counts.good + counts.mid)}%, #ef4444 0)` }} className="rounded-full shadow-inner"></div>
-              </div>
-            </div>
-          );
-        })()}
-      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {loading ? (
           <div className="col-span-full py-20 flex flex-col items-center justify-center">
@@ -1185,7 +1143,7 @@ const App = () => {
               <Route path="/class/:id/statistics" element={<ClassStatistics courses={courses} examSessions={examSessions} />} />
               <Route path="/statistics" element={<StatisticsOverview courses={courses} examSessions={examSessions} />} />
               <Route path="/student/:id" element={<StudentDetails courses={courses} studentsCache={studentsCache} answerKeys={answerKeys} onGradeExam={handleGradeExam} examHistory={examSessions} />} />
-              <Route path="/keys" element={<AnswerKeysManagement keys={answerKeys} onDeleteKey={deleteAnswerKey} onAddKey={addAnswerKey} searchTerm={searchTerm} />} />
+              <Route path="/keys" element={<AnswerKeysManagement keys={answerKeys} onDeleteKey={deleteAnswerKey} onAddKey={addAnswerKey} searchTerm={searchTerm} examSessions={examSessions} courses={courses} />} />
               <Route path="/students" element={<StudentsList searchTerm={searchTerm} studentsCache={studentsCache} examSessions={examSessions} />} />
               <Route path="/settings" element={<div className="p-8 text-gray-400 uppercase font-black text-center">Trang cài đặt đang được phát triển</div>} />
               <Route path="*" element={<Navigate to="/" replace />} />
