@@ -415,7 +415,7 @@ const Header = ({ userEmail, searchTerm, setSearchTerm }: { userEmail: string, s
   </header>
 );
 
-const AnswerKeysManagement = ({ keys, onAddKey, onDeleteKey, searchTerm }: { keys: AnswerKey[], onAddKey: (key: Omit<AnswerKey, 'id'>) => void, onDeleteKey: (id: string) => void, searchTerm: string }) => {
+const AnswerKeysManagement = ({ keys, onAddKey, onDeleteKey, searchTerm, examSessions, courses }: { keys: AnswerKey[], onAddKey: (key: Omit<AnswerKey, 'id'>) => void, onDeleteKey: (id: string) => void, searchTerm: string, examSessions: ExamSession[], courses: Course[] }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [detailKey, setDetailKey] = useState<AnswerKey | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -1142,7 +1142,7 @@ const App = () => {
               <Route path="/class/:id/statistics" element={<ClassStatistics courses={courses} examSessions={examSessions} />} />
               <Route path="/statistics" element={<StatisticsOverview courses={courses} examSessions={examSessions} />} />
               <Route path="/student/:id" element={<StudentDetails courses={courses} studentsCache={studentsCache} answerKeys={answerKeys} onGradeExam={handleGradeExam} examHistory={examSessions} />} />
-              <Route path="/keys" element={<AnswerKeysManagement keys={answerKeys} onDeleteKey={deleteAnswerKey} onAddKey={addAnswerKey} searchTerm={searchTerm} />} />
+              <Route path="/keys" element={<AnswerKeysManagement keys={answerKeys} onDeleteKey={deleteAnswerKey} onAddKey={addAnswerKey} searchTerm={searchTerm} examSessions={examSessions} courses={courses} />} />
               <Route path="/students" element={<StudentsList searchTerm={searchTerm} studentsCache={studentsCache} examSessions={examSessions} />} />
               <Route path="/settings" element={<div className="p-8 text-gray-400 uppercase font-black text-center">Trang cài đặt đang được phát triển</div>} />
               <Route path="*" element={<Navigate to="/" replace />} />
