@@ -12,6 +12,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { GoogleGenAI } from "@google/genai";
 
 import { VusLogo, MOCK_ANSWER_KEYS, MOCK_HISTORY, MOCK_COURSES } from './constants.tsx';
+import { auth, initFirebase, signInWithMicrosoft, onAuthStateChanged, signOutFirebase } from './services/firebase';
 import { Course, Student, AnswerKey, GradeStatus, ExamSession, ApiResponse, ApiStudentResponse } from './types.ts';
 import { processExamImage, identifyExamCode } from './services/geminiService.ts';
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string;
@@ -358,7 +359,7 @@ async function fetchAllFromOrds<T>(baseUrl: string, headers: Record<string, stri
 
 async function fetchCoursesFromOrds(email: string): Promise<Course[]> {
   try {
-    const initialUrl = `https://vhub.vus.edu.vn/ords/connect/exams/MyCourses`;
+    const initialUrl = `https://lxp.vus.edu.vn/ords/connect/exams/MyCourses`;
     const items = await fetchAllFromOrds<any>(initialUrl, { 'APP_USER': email });
     if (items.length === 0) return [];
     return items.map((item: any) => ({
@@ -1074,25 +1075,36 @@ const StudentsList = ({ searchTerm, studentsCache, examSessions }: { searchTerm:
 };
 
 const LoginScreen = ({ onLogin }: { onLogin: (email: string, courses: Course[]) => void }) => {
-  const [email, setEmail] = useState('thao.nguyentt@vus-etsc.edu.vn');
   const [loading, setLoading] = useState(false);
-  const handleFormSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSSO = async () => {
     if (loading) return;
     setLoading(true);
     try {
-      const fetchedCourses = await fetchCoursesFromOrds(email);
-      onLogin(email, fetchedCourses.length > 0 ? fetchedCourses : MOCK_COURSES);
-    } catch (err) { onLogin(email, MOCK_COURSES); } finally { setLoading(false); }
+      await initFirebase();
+      const user = await signInWithMicrosoft();
+      const email = user?.email as string | undefined;
+      if (email) {
+        const fetchedCourses = await fetchCoursesFromOrds(email);
+        onLogin(email, fetchedCourses.length > 0 ? fetchedCourses : MOCK_COURSES);
+      } else {
+        alert('Không lấy được email từ Microsoft SSO.');
+      }
+    } catch (err) {
+      console.error('SSO error', err);
+      alert('Đăng nhập thất bại. Vui lòng thử lại.');
+    } finally { setLoading(false); }
   };
+
   return (
     <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-[2rem] shadow-2xl p-10 border border-gray-100 animate-in fade-in zoom-in duration-300">
         <div className="flex justify-center mb-8"><VusLogo /></div>
-        <form onSubmit={handleFormSubmit} className="space-y-6">
-          <div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Email nội bộ (VUS)</label><div className="relative"><Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} /><input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold focus:ring-4 focus:ring-vus-blue/5 outline-none transition-all shadow-inner" required /></div></div>
-          <button type="submit" disabled={loading} className="w-full bg-vus-blue text-white py-4 rounded-2xl font-black uppercase shadow-lg hover:bg-blue-900 disabled:bg-gray-200 flex items-center justify-center gap-2 transition-all active:scale-95">{loading ? <Loader2 className="animate-spin" size={20} /> : <ArrowRight size={20} />}{loading ? 'Đang xử lý...' : 'Vào hệ thống'}</button>
-        </form>
+        <div className="space-y-6">
+          <button onClick={handleSSO} disabled={loading} className="w-full bg-[#0078d4] text-white py-4 rounded-2xl font-black uppercase shadow-lg hover:opacity-95 disabled:opacity-60 flex items-center justify-center gap-3 transition-all active:scale-95">
+            {loading ? <Loader2 className="animate-spin" size={20} /> : <Mail size={18} />}
+            {loading ? 'Đang xử lý...' : 'Đăng nhập với Microsoft'}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1107,7 +1119,7 @@ const App = () => {
   const [examSessions, setExamSessions] = useState<ExamSession[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const handleLogin = (email: string, fetchedCourses: Course[]) => { setUserEmail(email); setCourses(fetchedCourses); };
-  const handleLogout = () => { setUserEmail(null); setCourses([]); setStudentsCache({}); setSearchTerm(''); };
+  const handleLogout = async () => { await signOutFirebase(); setUserEmail(null); setCourses([]); setStudentsCache({}); setSearchTerm(''); };
   const addAnswerKey = (newKey: Omit<AnswerKey, 'id'>) => setAnswerKeys(prev => [{ ...newKey, id: 'k' + Date.now() }, ...prev]);
   const deleteAnswerKey = (id: string) => setAnswerKeys(prev => prev.filter(k => k.id !== id));
   const handleGradeExam = (session: ExamSession) => setExamSessions(prev => [session, ...prev]);
@@ -1119,6 +1131,23 @@ const App = () => {
       setCourses(fetchedCourses.length > 0 ? fetchedCourses : MOCK_COURSES);
     } catch (err) { } finally { setIsRefreshing(false); }
   };
+  // Listen for Firebase persisted session on mount
+  useEffect(() => {
+    initFirebase().catch(() => {});
+    const unsub = onAuthStateChanged(async (user: any) => {
+      if (user && user.email) {
+        setUserEmail(user.email);
+        try {
+          const fetched = await fetchCoursesFromOrds(user.email);
+          setCourses(fetched.length > 0 ? fetched : MOCK_COURSES);
+        } catch (e) { }
+      } else {
+        setUserEmail(null);
+      }
+    });
+    return () => unsub();
+  }, []);
+
   if (!userEmail) return <LoginScreen onLogin={handleLogin} />;
   return (
     <HashRouter>

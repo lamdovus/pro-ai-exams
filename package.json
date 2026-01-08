@@ -16,6 +16,8 @@
     "recharts": "^3.6.0",
     "react-router-dom": "^7.10.1",
     "pdfjs-dist": "3.11.174"
+    ,
+    "firebase": "^10.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
