@@ -374,6 +374,64 @@ async function fetchCoursesFromOrds(email: string): Promise<Course[]> {
   } catch (e) { return []; }
 }
 
+// --- New: background pagination, cache and cancel support ---
+const COURSES_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
+function cacheKeyForEmail(email: string) { return `courses_cache:${email}`; }
+function loadCoursesCache(email: string): Course[] | null {
+  try {
+    const raw = localStorage.getItem(cacheKeyForEmail(email));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.timestamp || !parsed.courses) return null;
+    if (Date.now() - parsed.timestamp > COURSES_CACHE_TTL) return null;
+    return parsed.courses as Course[];
+  } catch (e) { return null; }
+}
+function saveCoursesCache(email: string, courses: Course[]) {
+  try { localStorage.setItem(cacheKeyForEmail(email), JSON.stringify({ timestamp: Date.now(), courses })); } catch (e) {}
+}
+
+async function fetchCoursesPage(url: string, headers: Record<string,string>, signal?: AbortSignal) {
+  const resp = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json', ...headers }, signal });
+  if (!resp.ok) throw new Error('Fetch failed');
+  const data = await resp.json();
+  const items = data.items || [];
+  const nextLink = data.links?.find((l: any) => l.rel === 'next');
+  const nextUrl = (data.hasMore && nextLink) ? nextLink.href.replace('http://', 'https://') : null;
+  return { items, nextUrl };
+}
+
+// Start background load: fetch pages sequentially and call onPage for each page's items.
+async function startCoursesBackgroundLoad(email: string, onPage: (items: Course[]) => void, onProgress?: (count: number) => void, signal?: AbortSignal) {
+  const initialUrl = `https://lxp.vus.edu.vn/ords/connect/exams/MyCourses`;
+  const headers = { 'APP_USER': email };
+  try {
+    let next = initialUrl;
+    let totalAppended = 0;
+    while (next && (!signal || !signal.aborted)) {
+      const { items, nextUrl } = await fetchCoursesPage(next, headers, signal);
+      const mapped = items.map((item: any) => ({
+        id: item.course_code || String(item.course_id || Math.random()),
+        name: item.course_code || item.course_name || 'Khóa học VUS',
+        code: item.code || 'ENG',
+        schedule: item.from_to_date || 'N/A',
+        room: item.classroom || 'TBD',
+        studentCount: item.count_students || 0,
+        campus: item.campuse_code || 'Campus'
+      }));
+      if (mapped.length > 0) {
+        onPage(mapped);
+        totalAppended += mapped.length;
+        if (onProgress) onProgress(totalAppended);
+      }
+      next = nextUrl;
+    }
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 const SidebarItem = ({ icon: Icon, label, to, exact = false }: { icon: any, label: string, to: string, exact?: boolean }) => {
   const location = useLocation();
   const isActive = exact ? location.pathname === to : location.pathname.startsWith(to === '/' ? '____' : to) || (to === '/' && location.pathname === '/');
@@ -873,7 +931,7 @@ const StudentDetails = ({ courses, studentsCache, answerKeys, onGradeExam, examH
   );
 };
 
-const Dashboard = ({ courses, examSessions, onRefresh, isRefreshing, searchTerm }: any) => {
+const Dashboard = ({ courses, examSessions, onRefresh, isRefreshing, searchTerm, isBackgroundLoading, backgroundLoadedCount, onStopBackground }: any) => {
   const filteredCourses = useMemo(() => courses.filter((c: any) => c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.campus.toLowerCase().includes(searchTerm.toLowerCase())), [courses, searchTerm]);
 
   const getClassStats = (courseId: string, totalTarget: number) => {
@@ -894,6 +952,12 @@ const Dashboard = ({ courses, examSessions, onRefresh, isRefreshing, searchTerm 
           <div className="flex items-center gap-4 mt-1">
             <p className="text-gray-400 font-medium uppercase tracking-widest text-[10px]">Hiển thị {filteredCourses.length} lớp học đang quản lý</p>
           </div>
+          {isBackgroundLoading && (
+            <div className="mt-3 flex items-center gap-3">
+              <div className="text-sm text-gray-500">Đang tải thêm… (đã tải {backgroundLoadedCount} lớp)</div>
+              <button onClick={onStopBackground} className="text-xs px-3 py-1 bg-gray-100 rounded-xl">Dừng tải</button>
+            </div>
+          )}
         </div>
         <button onClick={onRefresh} disabled={isRefreshing} className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-black text-gray-600 uppercase hover:bg-gray-50 transition-all active:scale-95 disabled:opacity-50 shadow-sm"><RefreshCcw size={14} className={isRefreshing ? 'animate-spin' : ''} /> {isRefreshing ? 'Đang tải...' : 'Làm mới'}</button>
       </div>
@@ -1149,8 +1213,31 @@ const LoginScreen = ({ onLogin }: { onLogin: (email: string, courses: Course[]) 
       const user = await signInWithMicrosoft();
       const email = user?.email as string | undefined;
       if (email) {
-        const fetchedCourses = await fetchCoursesFromOrds(email);
-        onLogin(email, fetchedCourses.length > 0 ? fetchedCourses : MOCK_COURSES);
+        // render cached courses immediately if available
+        const cached = loadCoursesCache(email);
+        if (cached && cached.length > 0) {
+          onLogin(email, cached);
+        } else {
+          try {
+            const initialUrl = `https://lxp.vus.edu.vn/ords/connect/exams/MyCourses`;
+            const { items } = await fetchCoursesPage(initialUrl, { 'APP_USER': email });
+            const mapped = items.map((item: any) => ({
+              id: item.course_code || String(item.course_id || Math.random()),
+              name: item.course_code || item.course_name || 'Khóa học VUS',
+              code: item.code || 'ENG',
+              schedule: item.from_to_date || 'N/A',
+              room: item.classroom || 'TBD',
+              studentCount: item.count_students || 0,
+              campus: item.campuse_code || 'Campus'
+            }));
+            onLogin(email, mapped.length > 0 ? mapped : MOCK_COURSES);
+          } catch (e) {
+            const fetchedCourses = await fetchCoursesFromOrds(email);
+            onLogin(email, fetchedCourses.length > 0 ? fetchedCourses : MOCK_COURSES);
+          }
+        }
+        // always start background loading to fetch remaining pages and refresh cache
+        beginBackgroundLoading(email);
       } else {
         alert('Không lấy được email từ Microsoft SSO.');
       }
@@ -1179,10 +1266,47 @@ const App = () => {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isBgLoading, setIsBgLoading] = useState(false);
+  const [bgLoadedCount, setBgLoadedCount] = useState(0);
+  const bgControllerRef = useRef<AbortController | null>(null);
   const [answerKeys, setAnswerKeys] = useState<AnswerKey[]>(MOCK_ANSWER_KEYS);
   const [studentsCache, setStudentsCache] = useState<Record<string, Student[]>>({});
   const [examSessions, setExamSessions] = useState<ExamSession[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+
+  const stopBackgroundLoading = () => {
+    if (bgControllerRef.current) {
+      try { bgControllerRef.current.abort(); } catch (e) {}
+      bgControllerRef.current = null;
+    }
+    setIsBgLoading(false);
+  };
+
+  const beginBackgroundLoading = async (email: string) => {
+    stopBackgroundLoading();
+    const controller = new AbortController();
+    bgControllerRef.current = controller;
+    setIsBgLoading(true);
+    setBgLoadedCount(0);
+
+    await startCoursesBackgroundLoad(email, (items: Course[]) => {
+      // append with dedupe
+      setCourses(prev => {
+        const map = new Map<string, Course>();
+        prev.forEach(c => map.set(c.id, c));
+        items.forEach(c => map.set(c.id, c));
+        const merged = Array.from(map.values());
+        // save incremental cache
+        saveCoursesCache(email, merged);
+        return merged;
+      });
+    }, (count: number) => {
+      setBgLoadedCount(count);
+    }, controller.signal).finally(() => {
+      if (bgControllerRef.current === controller) bgControllerRef.current = null;
+      setIsBgLoading(false);
+    });
+  };
   const handleLogin = (email: string, fetchedCourses: Course[]) => { setUserEmail(email); setCourses(fetchedCourses); };
   const handleLogout = async () => { await signOutFirebase(); setUserEmail(null); setCourses([]); setStudentsCache({}); setSearchTerm(''); };
   const addAnswerKey = (newKey: Omit<AnswerKey, 'id'>) => setAnswerKeys(prev => [{ ...newKey, id: 'k' + Date.now() }, ...prev]);
@@ -1192,8 +1316,30 @@ const App = () => {
     if (!userEmail || isRefreshing) return;
     setIsRefreshing(true);
     try {
-      const fetchedCourses = await fetchCoursesFromOrds(userEmail);
-      setCourses(fetchedCourses.length > 0 ? fetchedCourses : MOCK_COURSES);
+      // quick fetch first page then start background refresh
+      const initialUrl = `https://lxp.vus.edu.vn/ords/connect/exams/MyCourses`;
+      try {
+        const { items } = await fetchCoursesPage(initialUrl, { 'APP_USER': userEmail });
+        const mapped = items.map((item: any) => ({
+          id: item.course_code || String(item.course_id || Math.random()),
+          name: item.course_code || item.course_name || 'Khóa học VUS',
+          code: item.code || 'ENG',
+          schedule: item.from_to_date || 'N/A',
+          room: item.classroom || 'TBD',
+          studentCount: item.count_students || 0,
+          campus: item.campuse_code || 'Campus'
+        }));
+        setCourses(prev => {
+          const map = new Map<string, Course>(); prev.forEach(c => map.set(c.id, c)); mapped.forEach(c => map.set(c.id, c));
+          const merged = Array.from(map.values()); saveCoursesCache(userEmail, merged); return merged;
+        });
+      } catch (e) {
+        // fallback to older method
+        const fetchedCourses = await fetchCoursesFromOrds(userEmail);
+        setCourses(fetchedCourses.length > 0 ? fetchedCourses : MOCK_COURSES);
+      }
+      // start background to fetch remaining pages
+      beginBackgroundLoading(userEmail);
     } catch (err) { } finally { setIsRefreshing(false); }
   };
   // Listen for Firebase persisted session on mount
@@ -1203,8 +1349,33 @@ const App = () => {
       if (user && user.email) {
         setUserEmail(user.email);
         try {
-          const fetched = await fetchCoursesFromOrds(user.email);
-          setCourses(fetched.length > 0 ? fetched : MOCK_COURSES);
+          // render from cache immediately if available
+          const cached = loadCoursesCache(user.email);
+          if (cached && cached.length > 0) {
+            setCourses(cached);
+            // refresh in background
+            beginBackgroundLoading(user.email);
+          } else {
+            // quick fetch initial page then start background loading
+            try {
+              const initialUrl = `https://lxp.vus.edu.vn/ords/connect/exams/MyCourses`;
+              const { items } = await fetchCoursesPage(initialUrl, { 'APP_USER': user.email });
+              const mapped = items.map((item: any) => ({
+                id: item.course_code || String(item.course_id || Math.random()),
+                name: item.course_code || item.course_name || 'Khóa học VUS',
+                code: item.code || 'ENG',
+                schedule: item.from_to_date || 'N/A',
+                room: item.classroom || 'TBD',
+                studentCount: item.count_students || 0,
+                campus: item.campuse_code || 'Campus'
+              }));
+              setCourses(mapped.length > 0 ? mapped : MOCK_COURSES);
+            } catch (e) {
+              const fetched = await fetchCoursesFromOrds(user.email);
+              setCourses(fetched.length > 0 ? fetched : MOCK_COURSES);
+            }
+            beginBackgroundLoading(user.email);
+          }
         } catch (e) { }
       } else {
         setUserEmail(null);
@@ -1232,7 +1403,7 @@ const App = () => {
           <Header userEmail={userEmail} searchTerm={searchTerm} setSearchTerm={setSearchTerm} />
           <main className="flex-1 overflow-auto bg-[#fcfdfe]">
             <Routes>
-              <Route path="/" element={<Dashboard courses={courses} examSessions={examSessions} onRefresh={handleRefreshCourses} isRefreshing={isRefreshing} searchTerm={searchTerm} />} />
+              <Route path="/" element={<Dashboard courses={courses} examSessions={examSessions} onRefresh={handleRefreshCourses} isRefreshing={isRefreshing} searchTerm={searchTerm} isBackgroundLoading={isBgLoading} backgroundLoadedCount={bgLoadedCount} onStopBackground={stopBackgroundLoading} />} />
               <Route path="/class/:id" element={<ClassDetails courses={courses} studentsCache={studentsCache} onUpdateStudents={(cid: string, s: any) => setStudentsCache(p => ({ ...p, [cid]: s }))} userEmail={userEmail} searchTerm={searchTerm} examSessions={examSessions} />} />
               <Route path="/class/:id/statistics" element={<ClassStatistics courses={courses} examSessions={examSessions} />} />
               <Route path="/statistics" element={<StatisticsOverview courses={courses} examSessions={examSessions} />} />
